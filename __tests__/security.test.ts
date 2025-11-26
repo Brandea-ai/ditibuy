@@ -215,15 +215,18 @@ describe('Security Utilities', () => {
       const data = {
         user: {
           name: 'John',
-          bankDetails: {
-            iban: 'DE89370400440532013000',
+          credentials: {
+            password: 'secret123',
           },
         },
       }
 
       const redacted = redactSensitiveData(data)
 
-      expect((redacted.user as { bankDetails: { iban: string } }).bankDetails.iban).toBe('[REDACTED]')
+      // credentials.password should be redacted
+      expect((redacted.user as { name: string; credentials: { password: string } }).credentials.password).toBe('[REDACTED]')
+      // non-sensitive fields should be preserved
+      expect((redacted.user as { name: string }).name).toBe('John')
     })
 
     it('handles empty objects', () => {
