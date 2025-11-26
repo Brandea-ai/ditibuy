@@ -2,10 +2,12 @@ import type { Metadata } from 'next'
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import { Header, Footer } from '@/components/layout'
+import { SessionProvider } from '@/components/providers/SessionProvider'
 
 /* ============================================
    ROOT LAYOUT
    Phase 1: App Structure
+   Phase 3: Added SessionProvider
    ============================================ */
 
 const inter = Inter({
@@ -91,9 +93,11 @@ export default function RootLayout({
   return (
     <html lang="de" className={`${inter.variable} ${plusJakarta.variable}`}>
       <body className="font-sans antialiased">
-        <Header />
-        <main className="min-h-screen">{children}</main>
-        <Footer />
+        <SessionProvider>
+          <Header />
+          <main className="min-h-screen">{children}</main>
+          <Footer />
+        </SessionProvider>
       </body>
     </html>
   )

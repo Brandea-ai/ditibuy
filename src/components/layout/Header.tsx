@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useSession, signOut } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Menu, X, ChevronDown, User, LogIn } from 'lucide-react'
+import { Menu, X, ChevronDown, User, LogIn, LogOut, LayoutDashboard } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button, ButtonLink } from '@/components/ui'
+import { ButtonLink } from '@/components/ui'
 
 /* ============================================
    HEADER COMPONENT
    Phase 1: Layout Components
+   Phase 3: Added Auth State
    ============================================ */
 
 const navigation = [
@@ -31,9 +33,11 @@ const navigation = [
 ]
 
 export function Header() {
+  const { data: session, status } = useSession()
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [showUserMenu, setShowUserMenu] = useState(false)
 
   // Handle scroll
   useEffect(() => {
@@ -147,18 +151,80 @@ export function Header() {
 
           {/* Desktop Actions */}
           <div className="hidden lg:flex items-center gap-3">
-            <Link
-              href="/login"
-              className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors',
-                isScrolled
-                  ? 'text-gray-700 hover:text-primary hover:bg-gray-50'
-                  : 'text-white/90 hover:text-white hover:bg-white/10'
-              )}
-            >
-              <LogIn className="w-4 h-4" />
-              Anmelden
-            </Link>
+            {status === 'authenticated' && session?.user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  onBlur={() => setTimeout(() => setShowUserMenu(false), 200)}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors',
+                    isScrolled
+                      ? 'text-gray-700 hover:text-primary hover:bg-gray-50'
+                      : 'text-white/90 hover:text-white hover:bg-white/10'
+                  )}
+                >
+                  <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-bold">
+                    {session.user.name?.[0]?.toUpperCase() || session.user.email?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                  <ChevronDown className={cn('w-4 h-4 transition-transform', showUserMenu && 'rotate-180')} />
+                </button>
+                <AnimatePresence>
+                  {showUserMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="absolute top-full right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 overflow-hidden"
+                    >
+                      <div className="px-4 py-3 border-b border-gray-100">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {session.user.name || 'Benutzer'}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {session.user.email}
+                        </p>
+                      </div>
+                      <Link
+                        href="/dashboard"
+                        className="flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <LayoutDashboard className="w-4 h-4" />
+                        Dashboard
+                      </Link>
+                      <Link
+                        href="/profil"
+                        className="flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <User className="w-4 h-4" />
+                        Profil
+                      </Link>
+                      <div className="border-t border-gray-100 mt-2 pt-2">
+                        <button
+                          onClick={() => signOut({ callbackUrl: '/' })}
+                          className="flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors w-full"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Abmelden
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <Link
+                href="/login"
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors',
+                  isScrolled
+                    ? 'text-gray-700 hover:text-primary hover:bg-gray-50'
+                    : 'text-white/90 hover:text-white hover:bg-white/10'
+                )}
+              >
+                <LogIn className="w-4 h-4" />
+                Anmelden
+              </Link>
+            )}
             <ButtonLink href="/verkaufen" variant="accent" size="md">
               Jetzt verkaufen
             </ButtonLink>
@@ -251,14 +317,58 @@ export function Header() {
               ))}
 
               <div className="pt-4 mt-4 border-t border-gray-100 space-y-3">
-                <Link
-                  href="/login"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-gray-700 font-medium"
-                >
-                  <LogIn className="w-4 h-4" />
-                  Anmelden
-                </Link>
+                {status === 'authenticated' && session?.user ? (
+                  <>
+                    <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl">
+                      <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-bold">
+                        {session.user.name?.[0]?.toUpperCase() || session.user.email?.[0]?.toUpperCase() || 'U'}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {session.user.name || 'Benutzer'}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {session.user.email}
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-gray-100 text-gray-700 font-medium"
+                    >
+                      <LayoutDashboard className="w-4 h-4" />
+                      Dashboard
+                    </Link>
+                    <Link
+                      href="/profil"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-gray-700 font-medium"
+                    >
+                      <User className="w-4 h-4" />
+                      Profil
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false)
+                        signOut({ callbackUrl: '/' })
+                      }}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl text-red-600 font-medium"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Abmelden
+                    </button>
+                  </>
+                ) : (
+                  <Link
+                    href="/login"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-gray-700 font-medium"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Anmelden
+                  </Link>
+                )}
                 <ButtonLink
                   href="/verkaufen"
                   variant="accent"
