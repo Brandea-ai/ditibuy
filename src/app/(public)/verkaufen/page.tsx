@@ -83,7 +83,7 @@ export default function VerkaufenPage() {
       <SectionLayout
         id="verkaufen-header"
         alignment="center"
-        background="transparent"
+        background="none"
         paddingY="md"
       >
         <div className="text-center mb-8">

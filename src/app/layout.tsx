@@ -1,5 +1,4 @@
-import type { Metadata } from 'next'
-import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { Header, Footer } from '@/components/layout'
 import { SessionProvider } from '@/components/providers/SessionProvider'
@@ -10,19 +9,15 @@ import { SessionProvider } from '@/components/providers/SessionProvider'
    Phase 3: Added SessionProvider
    ============================================ */
 
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
-
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  variable: '--font-plus-jakarta',
-  display: 'swap',
-})
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: '#0066CC',
+}
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXTAUTH_URL || 'https://bayernankauf.de'),
   title: {
     default: 'BayernAnkauf – Elektronik verkaufen in Bayern',
     template: '%s | BayernAnkauf',
@@ -71,12 +66,6 @@ export const metadata: Metadata = {
       'Verkaufen Sie Ihre gebrauchten Smartphones, Tablets und Laptops schnell und sicher.',
     images: ['/og-image.png'],
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 5,
-  },
-  themeColor: '#0066CC',
   manifest: '/manifest.json',
   icons: {
     icon: '/favicon.ico',
@@ -91,7 +80,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="de" className={`${inter.variable} ${plusJakarta.variable}`}>
+    <html lang="de">
       <body className="font-sans antialiased">
         <SessionProvider>
           <Header />

@@ -80,10 +80,10 @@ export async function POST(request: NextRequest) {
     // Log registration for audit
     await prisma.workflowLog.create({
       data: {
-        entityType: 'User',
+        entityType: 'USER',
         entityId: user.id,
         action: 'USER_REGISTERED',
-        performedBy: user.id,
+        triggeredBy: `USER:${user.id}`,
       },
     })
 
