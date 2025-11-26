@@ -1,0 +1,344 @@
+// ============================================
+// PRISMA SCHEMA – BayernAnkauf
+// Phase 2: Domain & Datenbank
+//
+// Entities:
+// - User (Benutzer)
+// - DeviceModel (Geräte-Katalog)
+// - Offer (Ankaufsangebote)
+// - BankDetails (Bankdaten)
+// - Payment (Auszahlungen)
+// - WorkflowLog (Audit Trail)
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER
+// ============================================
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  hashedPassword String
+  emailVerified  DateTime?
+
+  // Persönliche Daten
+  firstName      String?
+  lastName       String?
+  phone          String?
+
+  // Adresse
+  street         String?
+  zip            String?
+  city           String?
+  state          String    @default("Bayern")
+
+  // Herkunft (für regionale Statistiken)
+  origin         String?
+
+  // Timestamps
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lastLoginAt    DateTime?
+
+  // Relationen
+  offers         Offer[]
+  bankDetails    BankDetails?
+  sessions       Session[]
+
+  @@map("users")
+}
+
+// ============================================
+// SESSION (für Auth)
+// ============================================
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ============================================
+// DEVICE MODEL (Ankauf-Katalog)
+// ============================================
+model DeviceModel {
+  id            String         @id @default(cuid())
+
+  // Klassifizierung
+  category      DeviceCategory
+  brand         String
+  modelName     String
+
+  // Spezifikationen
+  storageGb     Int?
+  releaseYear   Int?
+  color         String?
+
+  // Preisgestaltung
+  basePriceEuro Float
+
+  // Status
+  isActive      Boolean        @default(true)
+  isFeatured    Boolean        @default(false)
+
+  // SEO
+  slug          String?        @unique
+
+  // Timestamps
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relationen
+  offers        Offer[]
+
+  @@unique([brand, modelName, storageGb])
+  @@index([category])
+  @@index([brand])
+  @@index([isActive])
+  @@map("device_models")
+}
+
+enum DeviceCategory {
+  SMARTPHONE
+  TABLET
+  LAPTOP
+  SMARTWATCH
+  KONSOLE
+  KAMERA
+  SONSTIGES
+}
+
+// ============================================
+// OFFER (Ankaufsangebot)
+// ============================================
+model Offer {
+  id                   String         @id @default(cuid())
+
+  // Referenzen
+  userId               String
+  deviceModelId        String
+
+  // Zustandsbewertung
+  conditionLevel       ConditionLevel
+  damageFlags          Json           // Array von DamageFlag strings
+
+  // Preisberechnung
+  basePriceEuro        Float          // Ausgangspreis
+  conditionFactor      Float          // Faktor für Zustand (0.2 - 1.0)
+  damageDeduction      Float          // Abzug für Schäden in Euro
+  preliminaryOfferEuro Float          // Vorläufiges Angebot
+  finalOfferEuro       Float?         // Finales Angebot nach Prüfung
+
+  // Referenzcode (BY-YYYYMM-XXXXXX)
+  referenceCode        String         @unique
+
+  // Status
+  status               OfferStatus    @default(ENTWURF)
+
+  // Tracking
+  deviceReceivedAt     DateTime?
+  inspectedAt          DateTime?
+  completedAt          DateTime?
+
+  // Notizen
+  customerNotes        String?        // Notizen vom Kunden
+  internalNotes        String?        // Interne Notizen
+
+  // Timestamps
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  // Relationen
+  user                 User           @relation(fields: [userId], references: [id])
+  deviceModel          DeviceModel    @relation(fields: [deviceModelId], references: [id])
+  payments             Payment[]
+  workflowLogs         WorkflowLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([referenceCode])
+  @@index([createdAt])
+  @@map("offers")
+}
+
+enum ConditionLevel {
+  SEHR_GUT        // ~100% Basispreis - Wie neu, keine Gebrauchsspuren
+  GUT             // ~85% - Leichte Gebrauchsspuren
+  GEBRAUCHT       // ~70% - Normale Gebrauchsspuren
+  STARK_GEBRAUCHT // ~50% - Deutliche Gebrauchsspuren
+  DEFEKT          // ~20% - Funktionseinschränkungen
+}
+
+enum OfferStatus {
+  ENTWURF              // Kunde hat Kalkulator genutzt, aber nicht abgeschlossen
+  ANGEBOT_ERSTELLT     // Vorläufiges Angebot wurde erstellt
+  GERAET_EINGESENDET   // Gerät ist unterwegs
+  IN_PRUEFUNG          // Gerät wird geprüft
+  ANGEBOT_ANGEPASST    // Angebot wurde nach Prüfung geändert
+  AKZEPTIERT           // Kunde hat akzeptiert
+  ABGELEHNT            // Kunde hat abgelehnt
+  AUSZAHLUNG_INITIIERT // Payment wurde gestartet
+  AUSGEZAHLT           // Geld wurde überwiesen
+  STORNIERT            // Vorgang abgebrochen
+}
+
+// ============================================
+// BANK DETAILS
+// ============================================
+// SICHERHEITSHINWEIS:
+// In Produktion MÜSSEN IBAN/BIC verschlüsselt werden!
+// Optionen:
+// - Application-level Encryption (AES-256-GCM)
+// - PostgreSQL pgcrypto Extension
+// - External KMS (AWS KMS, HashiCorp Vault)
+//
+// NIEMALS Bankdaten in Logs schreiben!
+// ============================================
+model BankDetails {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+
+  // Kontodaten (TODO: In Produktion verschlüsseln!)
+  accountHolderName  String
+  iban               String   // WICHTIG: Verschlüsseln!
+  bic                String?  // WICHTIG: Verschlüsseln!
+
+  // Verifizierung
+  isVerified         Boolean  @default(false)
+  verifiedAt         DateTime?
+
+  // Timestamps
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relationen
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("bank_details")
+}
+
+// ============================================
+// PAYMENT (Auszahlungen)
+// ============================================
+model Payment {
+  id                String          @id @default(cuid())
+  offerId           String
+
+  // Provider
+  provider          String          @default("MOCK") // MOCK, stripe, mollie
+  providerPaymentId String?
+
+  // Betrag
+  amountEuro        Float
+  currency          String          @default("EUR")
+  direction         PaymentDirection @default(PAYOUT_TO_CUSTOMER)
+
+  // Status
+  status            PaymentStatus   @default(INITIATED)
+
+  // Fehlerbehandlung
+  failureReason     String?
+  retryCount        Int             @default(0)
+  lastRetryAt       DateTime?
+
+  // Timestamps
+  initiatedAt       DateTime        @default(now())
+  completedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  // Relationen
+  offer             Offer           @relation(fields: [offerId], references: [id])
+  workflowLogs      WorkflowLog[]
+
+  @@index([offerId])
+  @@index([status])
+  @@map("payments")
+}
+
+enum PaymentDirection {
+  PAYOUT_TO_CUSTOMER
+}
+
+enum PaymentStatus {
+  INITIATED    // Payment wurde erstellt
+  PENDING      // Warte auf Verarbeitung
+  PROCESSING   // Wird verarbeitet
+  COMPLETED    // Erfolgreich abgeschlossen
+  FAILED       // Fehlgeschlagen
+  CANCELLED    // Abgebrochen
+}
+
+// ============================================
+// WORKFLOW LOG (Audit Trail)
+// ============================================
+// Wichtig für:
+// - DSGVO-Nachweise
+// - Debugging
+// - Compliance
+// ============================================
+model WorkflowLog {
+  id          String   @id @default(cuid())
+
+  // Entität
+  entityType  String   // "OFFER", "PAYMENT", "USER", "BANK_DETAILS"
+  entityId    String
+
+  // Aktion
+  action      String   // "CREATED", "STATUS_CHANGED", "UPDATED", etc.
+
+  // Daten
+  oldValue    Json?    // Vorheriger Zustand
+  newValue    Json?    // Neuer Zustand
+  metadata    Json?    // Zusätzliche Infos
+
+  // Auslöser
+  triggeredBy String?  // "SYSTEM", "USER:{id}", "WEBHOOK:{provider}", "CRON"
+
+  // IP-Adresse (anonymisiert für DSGVO)
+  ipAddress   String?
+  userAgent   String?
+
+  // Timestamp
+  createdAt   DateTime @default(now())
+
+  // Optionale Relationen
+  offer       Offer?   @relation(fields: [offerId], references: [id])
+  offerId     String?
+  payment     Payment? @relation(fields: [paymentId], references: [id])
+  paymentId   String?
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("workflow_logs")
+}
+
+// ============================================
+// DSGVO: LÖSCHFRISTEN
+// ============================================
+// Implementierung: Cron-Job prüft täglich
+//
+// Daten-Kategorie          | Aufbewahrung    | Löschung nach
+// -------------------------|-----------------|---------------
+// User (aktiv)             | Unbegrenzt      | Auf Anfrage
+// User (inaktiv)           | 3 Jahre         | Automatisch
+// Offers                   | 10 Jahre        | Steuerrecht
+// BankDetails              | Bis Auszahlung  | Nach Abschluss + 30 Tage
+// WorkflowLogs             | 10 Jahre        | Compliance
+// Sessions                 | Ablaufdatum     | Automatisch
+// ============================================
