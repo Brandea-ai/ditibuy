@@ -1,11 +1,11 @@
 /* ============================================
    API: DEVICE MODELS
    GET /api/devices - List all device models
-   Phase 2: API Stubs
    ============================================ */
 
 import { NextRequest, NextResponse } from 'next/server'
-// import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
+import { DeviceCategory } from '@/types'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -15,45 +15,56 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
     const brand = searchParams.get('brand')
+    const limit = searchParams.get('limit')
+    const search = searchParams.get('search')
 
-    // TODO Phase 2: Implement after database connection
-    // const devices = await prisma.deviceModel.findMany({
-    //   where: {
-    //     isActive: true,
-    //     ...(category && { category: category as DeviceCategory }),
-    //     ...(brand && { brand }),
-    //   },
-    //   orderBy: [{ brand: 'asc' }, { modelName: 'asc' }],
-    // })
+    // Build where clause
+    const where: {
+      isActive: boolean
+      category?: DeviceCategory
+      brand?: string
+      modelName?: { contains: string; mode: 'insensitive' }
+    } = {
+      isActive: true,
+    }
 
-    // Mock response for now
-    const mockDevices = [
-      {
-        id: 'mock-1',
-        category: 'SMARTPHONE',
-        brand: 'Apple',
-        modelName: 'iPhone 15 Pro Max',
-        storageGb: 256,
-        basePriceEuro: 850,
-        isActive: true,
-      },
-      {
-        id: 'mock-2',
-        category: 'SMARTPHONE',
-        brand: 'Samsung',
-        modelName: 'Galaxy S24 Ultra',
-        storageGb: 256,
-        basePriceEuro: 720,
-        isActive: true,
-      },
-    ]
+    if (category) {
+      where.category = category.toUpperCase() as DeviceCategory
+    }
+    if (brand) {
+      where.brand = brand
+    }
+    if (search) {
+      where.modelName = { contains: search, mode: 'insensitive' }
+    }
+
+    // Fetch devices from database
+    const devices = await prisma.deviceModel.findMany({
+      where,
+      orderBy: [{ brand: 'asc' }, { basePriceEuro: 'desc' }, { modelName: 'asc' }],
+      take: limit ? parseInt(limit) : undefined,
+    })
+
+    // Get unique brands for the category
+    const brands = category
+      ? await prisma.deviceModel.findMany({
+          where: {
+            isActive: true,
+            category: category.toUpperCase() as DeviceCategory,
+          },
+          select: { brand: true },
+          distinct: ['brand'],
+          orderBy: { brand: 'asc' },
+        })
+      : []
 
     return NextResponse.json({
       success: true,
-      data: mockDevices,
+      data: devices,
       meta: {
-        total: mockDevices.length,
+        total: devices.length,
         filters: { category, brand },
+        brands: brands.map(b => b.brand),
       },
     })
   } catch (error) {

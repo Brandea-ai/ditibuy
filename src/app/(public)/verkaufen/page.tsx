@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useSearchParams } from 'next/navigation'
 import { SectionLayout } from '@/components/layout/SectionLayout'
 import { DeviceSelector } from '@/components/calculator/DeviceSelector'
 import { ConditionSelector } from '@/components/calculator/ConditionSelector'
@@ -9,7 +10,7 @@ import { PriceDisplay, CompactPriceDisplay } from '@/components/calculator/Price
 import { OfferSummary } from '@/components/calculator/OfferSummary'
 import { calculatePrice, PriceBreakdown } from '@/lib/calculator'
 import { DeviceModel, ConditionLevel, DamageFlag } from '@/types'
-import { Check, ArrowRight, ArrowLeft } from 'lucide-react'
+import { Check, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
 
 /* ============================================
    VERKAUFEN PAGE - CALCULATOR WIZARD
@@ -24,12 +25,42 @@ const STEPS: { id: WizardStep; label: string; number: number }[] = [
   { id: 'summary', label: 'Angebot', number: 3 },
 ]
 
-export default function VerkaufenPage() {
+function VerkaufenContent() {
+  const searchParams = useSearchParams()
+  const deviceId = searchParams.get('device')
+
   const [currentStep, setCurrentStep] = useState<WizardStep>('device')
   const [selectedDevice, setSelectedDevice] = useState<DeviceModel | null>(null)
   const [selectedCondition, setSelectedCondition] = useState<ConditionLevel | null>(null)
   const [selectedDamageFlags, setSelectedDamageFlags] = useState<DamageFlag[]>([])
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null)
+  const [isLoadingDevice, setIsLoadingDevice] = useState(false)
+
+  // Load device from URL parameter
+  useEffect(() => {
+    const loadDeviceFromUrl = async () => {
+      if (deviceId && !selectedDevice) {
+        setIsLoadingDevice(true)
+        try {
+          const response = await fetch(`/api/devices`)
+          const data = await response.json()
+          if (data.success) {
+            const device = data.data.find((d: DeviceModel) => d.id === deviceId)
+            if (device) {
+              setSelectedDevice(device)
+              setCurrentStep('condition')
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load device from URL:', error)
+        } finally {
+          setIsLoadingDevice(false)
+        }
+      }
+    }
+
+    loadDeviceFromUrl()
+  }, [deviceId, selectedDevice])
 
   // Calculate price whenever inputs change
   useEffect(() => {
@@ -152,9 +183,17 @@ export default function VerkaufenPage() {
       {/* Main Content */}
       <div className="bg-gray-50 rounded-t-3xl min-h-[60vh]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+          {/* Loading State for URL Device */}
+          {isLoadingDevice && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+              <p className="text-gray-600">Gerät wird geladen...</p>
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             {/* Step 1: Device Selection */}
-            {currentStep === 'device' && (
+            {currentStep === 'device' && !isLoadingDevice && (
               <motion.div
                 key="device"
                 initial={{ opacity: 0, x: -20 }}
@@ -276,5 +315,18 @@ export default function VerkaufenPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Wrap in Suspense for useSearchParams
+export default function VerkaufenPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-primary via-primary-dark to-gray-900">
+        <Loader2 className="w-10 h-10 animate-spin text-white" />
+      </div>
+    }>
+      <VerkaufenContent />
+    </Suspense>
   )
 }
